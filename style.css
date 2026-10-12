@@ -100,3 +100,9 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--c
 .chip { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 99px; padding: .35rem .7rem; font: inherit; font-size: .85rem; cursor: pointer; }
 .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .shot { width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: .5rem; }
+.group-h { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 1.1rem 0 .45rem; }
+.group-h:first-child { margin-top: .2rem; }
+.section-h { font-size: 1.05rem; margin: 1.4rem 0 .3rem; }
+.section-h:first-child { margin-top: .3rem; }
+.paste { white-space: pre-wrap; font-size: .88rem; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: .6rem; margin-top: .5rem; }
+.tag.type { color: var(--text); border-color: var(--text); }

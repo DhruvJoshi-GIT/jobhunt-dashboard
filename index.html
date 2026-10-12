@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f172a">
   <title>Job Hunt · Dhruv</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <!-- Login -->
@@ -37,6 +37,7 @@
     <nav class="tabs" id="tabs">
       <button data-tab="overview" class="active">Overview</button>
       <button data-tab="queue">Queue</button>
+      <button data-tab="needs">Needs you <span id="n-badge" class="badge hidden"></span></button>
       <button data-tab="questions">Questions <span id="q-badge" class="badge hidden"></span></button>
       <button data-tab="tracking">Applications</button>
       <button data-tab="interviews">Interviews</button>
@@ -59,6 +60,14 @@
             <option value="internship">Internships (Bangalore)</option>
             <option value="remote_job">Remote jobs</option>
           </select>
+          <select id="q-type">
+            <option value="">All types</option>
+            <option value="internship">Internship</option>
+            <option value="fulltime">Full-time</option>
+            <option value="parttime">Part-time</option>
+            <option value="contract">Contract</option>
+            <option value="none">Type not stated</option>
+          </select>
           <select id="q-sort">
             <option value="score">Best match</option>
             <option value="new">Newest</option>
@@ -67,6 +76,11 @@
         </div>
         <p class="hint">Jobs marked <b>auto-apply</b> are applied to automatically (no tap needed). Tap <b>✅ Apply for me</b> to push one to the front, or <b>✕ Skip</b> to never apply.</p>
         <div id="queue-list" class="list"></div>
+      </section>
+
+      <section id="tab-needs" class="tab hidden">
+        <p class="hint">The few things the agent can't finish alone. Everything is pre-filled: copy, paste, press Submit, then tap <b>I submitted it</b>.</p>
+        <div id="needs-list"></div>
       </section>
 
       <section id="tab-questions" class="tab hidden">
@@ -124,7 +138,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="config.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

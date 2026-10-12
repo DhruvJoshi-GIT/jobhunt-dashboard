@@ -81,7 +81,7 @@ function logout() {
 /* ---------- tabs ---------- */
 
 const LOADERS = {
-  overview: loadOverview, queue: loadQueue, questions: loadQuestions, tracking: loadTracking, interviews: loadInterviews,
+  overview: loadOverview, queue: loadQueue, needs: loadNeeds, questions: loadQuestions, tracking: loadTracking, interviews: loadInterviews,
   filtered: loadFiltered, cvs: loadCVs, settings: loadSettings,
 };
 
@@ -135,18 +135,26 @@ async function loadOverview() {
 /* ---------- job cards ---------- */
 
 const STATUS_LABEL = {
-  new: "In queue", approved: "Applying soon", ready: "Ready (test mode)", closed: "Job closed", applying: "Applying…", applied: "Applied", failed: "Auto-apply failed",
+  new: "In queue", prepared: "Ready for you (Internshala)", approved: "Applying soon", ready: "Ready (test mode)", closed: "Job closed", applying: "Applying…", applied: "Applied", failed: "Auto-apply failed",
   interview: "Interview", offer: "Offer 🎉", declined: "Company said no", rejected: "Skipped",
 };
+const TYPES = [["internship", "🎓 Internships"], ["fulltime", "💼 Full-time"], ["parttime", "⏱ Part-time"],
+               ["contract", "📄 Contract"], ["", "❔ Type not stated"]];
+const TYPE_NAME = { internship: "Internship", fulltime: "Full-time", parttime: "Part-time", contract: "Contract", "": "Type not stated" };
+const typeOf = (j) => (j.category === "internship" ? "internship" : (j.kind || ""));
+function grouped(rows, render) {
+  return TYPES.map(([k, title]) => {
+    const g = rows.filter((j) => typeOf(j) === k);
+    return g.length ? `<div class="group-h">${title} (${g.length})</div><div class="list">${g.map(render).join("")}</div>` : "";
+  }).join("");
+}
 const CAN_AUTO = (j) => ["greenhouse", "lever", "ashby"].includes(j.ats);
 
 function jobCard(j) {
   const score = Number(j.score) || 0;
-  const tags = [
-    j.category === "internship" ? "Internship" : "Remote",
-    j.kind && j.kind !== "internship" ? j.kind.replace("fulltime", "Full-time").replace("parttime", "Part-time").replace("contract", "Contract") : "",
-    `CV: ${j.variant}`, j.source,
-  ].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`);
+  const tags = [`<span class="tag type">${esc(TYPE_NAME[typeOf(j)])}</span>`].concat([
+    j.category === "internship" ? "" : "Remote", `CV: ${j.variant}`, j.source,
+  ].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`));
   if (j.salary) tags.unshift(`<span class="tag money">${esc(j.salary)}</span>`);
   if (CAN_AUTO(j)) tags.push(`<span class="tag auto">auto-apply possible</span>`);
   (j.flags || "").split(", ").filter(Boolean).forEach((f) => tags.push(`<span class="tag flag">${esc(f)}</span>`));
@@ -225,19 +233,23 @@ async function toggleDetails(card, id) {
   };
 }
 
-const JOB_FIELDS = "id, source, company, title, location, kind, category, url, apply_url, ats, salary, found_at, score, variant, flags, status, status_at";
+const JOB_FIELDS = "id, source, apply_log, company, title, location, kind, category, url, apply_url, ats, salary, found_at, score, variant, flags, status, status_at";
 
 async function loadQueue() {
   const cat = $("#q-category").value;
+  const type = $("#q-type").value;
   const sort = $("#q-sort").value === "new" ? "found_at DESC, score DESC" : "score DESC, found_at DESC";
   const words = $("#q-search").value.trim().toLowerCase();
   const params = ["new"];
   let where = "status = $1";
   if (cat) { params.push(cat); where += ` AND category = $${params.length}`; }
+  if (type === "internship") where += " AND category = 'internship'";
+  else if (type === "none") where += " AND category <> 'internship' AND (kind = '' OR kind IS NULL)";
+  else if (type) { params.push(type); where += ` AND category <> 'internship' AND kind = $${params.length}`; }
   if (words) { params.push(`%${words}%`); where += ` AND (LOWER(title) LIKE $${params.length} OR LOWER(company) LIKE $${params.length} OR LOWER(description) LIKE $${params.length})`; }
   const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE ${where} ORDER BY ${sort} LIMIT 150`, params);
   const list = $("#queue-list");
-  list.innerHTML = rows.length ? rows.map(jobCard).join("") : `<div class="empty">Nothing in the queue. New jobs arrive twice a day.</div>`;
+  list.innerHTML = rows.length ? grouped(rows, jobCard) : `<div class="empty">Nothing in the queue. New jobs arrive twice a day.</div>`;
   wireCards(list, loadQueue);
 }
 
@@ -246,7 +258,7 @@ async function loadTracking() {
   const ph = statuses.map((_, i) => `$${i + 1}`).join(", ");
   const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status IN (${ph}) ORDER BY status_at DESC LIMIT 200`, statuses);
   const list = $("#tracking-list");
-  list.innerHTML = rows.length ? rows.map(jobCard).join("") : `<div class="empty">Nothing here yet.</div>`;
+  list.innerHTML = rows.length ? grouped(rows, jobCard) : `<div class="empty">Nothing here yet.</div>`;
   wireCards(list, loadTracking);
 }
 
@@ -276,6 +288,52 @@ async function loadFiltered() {
       <div class="tags"><span class="tag flag">${esc(d.reason)}</span></div>
       <div class="actions"><a class="btn small" href="${safeUrl(d.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a></div>
     </div>`).join("") : `<div class="empty">Nothing filtered with that reason.</div>`;
+}
+
+async function loadNeeds() {
+  const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status = 'prepared'
+      OR (status = 'failed' AND apply_log NOT LIKE 'NEEDS:%')
+      OR (status = 'new' AND ats IN ('workday', '')) ORDER BY score DESC LIMIT 300`);
+  const pending = await sql("SELECT COUNT(*) AS n FROM jobs WHERE status = 'new' AND ats = 'internshala'");
+  const sections = [
+    ["📝 Internshala: ready for you to submit", "The answers are written for you. Open the internship, tap Apply, paste them, Submit.",
+      rows.filter((j) => j.status === "prepared"), internshalaCard],
+    ["🔒 CAPTCHA: just press Submit", "The form is filled up to the “I'm not a robot” check. Open it, tick it, Submit.",
+      rows.filter((j) => j.status === "failed" && /^CAPTCHA/.test(j.apply_log || "")), jobCard],
+    ["🏢 Workday", "Big companies' hiring system: each company needs its own Workday account (email + password) before you can apply.",
+      rows.filter((j) => j.status === "new" && j.ats === "workday"), jobCard],
+    ["⚠️ Auto-apply problems", "The agent tried but something went wrong (details inside). Tap Try again or apply yourself.",
+      rows.filter((j) => j.status === "failed" && !/^CAPTCHA/.test(j.apply_log || "")), jobCard],
+    ["🌐 Other sites", "Posted on job boards that link to the company's own site. The agent can't apply there yet.",
+      rows.filter((j) => j.status === "new" && j.ats === ""), jobCard],
+  ];
+  const total = sections.slice(0, 4).reduce((a, s) => a + s[2].length, 0);
+  const nb = $("#n-badge"); nb.textContent = total; nb.classList.toggle("hidden", !total);
+  $("#needs-list").innerHTML = sections.map(([title, help, list, card]) => list.length ? `
+      <h2 class="section-h">${title} (${list.length})</h2><p class="hint">${help}</p>${grouped(list, card)}` : "").join("")
+    + (Number(pending[0].n) ? `<p class="hint">⏳ ${pending[0].n} more Internshala internships are being prepared (a batch every hour).</p>` : "")
+    || `<div class="empty">Nothing needs you right now. 🎉</div>`;
+  $("#needs-list").querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
+    try { await navigator.clipboard.writeText(b.closest(".job").querySelector(`[data-text="${b.dataset.copy}"]`).textContent); toast("Copied"); }
+    catch (_) { toast("Long-press the text to copy it"); }
+  });
+  wireCards($("#needs-list"), loadNeeds);
+}
+
+function internshalaCard(j) {
+  let p = {};
+  try { p = JSON.parse((j.apply_log || "").replace(/^PREPARED:/, "")); } catch (_) {}
+  return `<article class="job" data-id="${esc(j.id)}">
+    <div class="job-title">${esc(j.title)}</div>
+    <div class="job-meta">${esc(j.company)} · ${esc((j.location || "").slice(0, 60))} ${j.salary ? "· " + esc(j.salary) : ""}</div>
+    <div class="actions"><a class="btn small primary" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">1. Open on Internshala ↗</a></div>
+    <div class="job-meta" style="margin-top:.6rem"><b>2. “Why should you be hired?”</b> <button class="btn small" data-copy="why">Copy</button></div>
+    <div class="paste" data-text="why">${esc(p.why || "")}</div>
+    <div class="job-meta" style="margin-top:.6rem"><b>Availability</b> <button class="btn small" data-copy="av">Copy</button></div>
+    <div class="paste" data-text="av">${esc(p.availability || "")}</div>
+    <div class="actions"><button class="btn small good" data-act="applied">3. ✅ I submitted it</button>
+      <button class="btn small bad" data-act="rejected">✕ Skip</button></div>
+  </article>`;
 }
 
 async function loadQuestions() {
@@ -401,6 +459,8 @@ function start() {
   $("#login").classList.add("hidden");
   $("#app").classList.remove("hidden");
   loadSettingsData().catch(handleError);
+  sql("SELECT COUNT(*) AS n FROM jobs WHERE status = 'prepared' OR (status = 'failed' AND apply_log NOT LIKE 'NEEDS:%') OR (status = 'new' AND ats = 'workday')")
+    .then((r) => { const b = $("#n-badge"); b.textContent = r[0].n; b.classList.toggle("hidden", !Number(r[0].n)); }).catch(() => {});
   sql("SELECT COUNT(*) AS n FROM answers WHERE answer = ''").then((r) => updateBadge(Number(r[0].n))).catch(() => {});
   const tab = location.hash.slice(1);
   showTab(LOADERS[tab] ? tab : "overview");
@@ -418,7 +478,7 @@ document.addEventListener("DOMContentLoaded", () => {
   $("#logout").onclick = logout;
   window.addEventListener("hashchange", () => { const t = location.hash.slice(1); if (CONN && LOADERS[t]) showTab(t); });
   $("#tabs").querySelectorAll("button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
-  ["#q-category", "#q-sort"].forEach((s) => $(s).onchange = () => loadQueue().catch(handleError));
+  ["#q-category", "#q-type", "#q-sort"].forEach((s) => $(s).onchange = () => loadQueue().catch(handleError));
   let timer;
   $("#q-search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => loadQueue().catch(handleError), 300); };
   $("#t-status").onchange = () => loadTracking().catch(handleError);
