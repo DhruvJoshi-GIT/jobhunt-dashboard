@@ -1,0 +1,366 @@
+/* Job Hunt dashboard.
+   Talks straight to the database over HTTPS (Neon's SQL-over-HTTP endpoint). The password you type
+   is the password of a limited database account that can only read jobs and change their status,
+   notes and the settings. Nothing secret is stored in this file. */
+"use strict";
+
+const CFG = window.JOBHUNT || {};
+const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
+const SQL_URL = LOCAL ? "/sql" : `https://${CFG.host}/sql`;
+const KEY = "jobhunt.conn";
+let CONN = sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || "";
+let SETTINGS = {};
+
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeUrl = (u) => (/^https?:\/\//i.test(u || "") ? esc(u) : "#");
+const now = () => new Date().toISOString().replace(/\.\d+Z$/, "Z");
+const ago = (iso) => {
+  if (!iso) return "";
+  const d = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (isNaN(d)) return "";
+  if (d < 3600) return `${Math.max(1, Math.round(d / 60))} min ago`;
+  if (d < 86400) return `${Math.round(d / 3600)} h ago`;
+  return `${Math.round(d / 86400)} d ago`;
+};
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.add("hidden"), 2600);
+}
+
+async function sql(query, params = []) {
+  const res = await fetch(SQL_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Neon-Connection-String": CONN },
+    body: JSON.stringify({ query, params }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    const err = new Error(text.slice(0, 300));
+    err.status = res.status;
+    throw err;
+  }
+  return (await res.json()).rows || [];
+}
+
+/* ---------- login ---------- */
+
+function connString(password) {
+  return `postgresql://${encodeURIComponent(CFG.role)}:${encodeURIComponent(password)}@${CFG.host}/${CFG.database}?sslmode=require`;
+}
+
+async function login(e) {
+  e.preventDefault();
+  const pw = $("#password").value;
+  $("#login-error").textContent = "";
+  CONN = connString(pw);
+  try {
+    await sql("SELECT 1 AS ok");
+    (($("#remember").checked) ? localStorage : sessionStorage).setItem(KEY, CONN);
+    $("#password").value = "";
+    start();
+  } catch (err) {
+    CONN = "";
+    $("#login-error").textContent = /password|auth/i.test(err.message) ? "Wrong password." : "Could not connect: " + err.message.slice(0, 120);
+  }
+}
+
+function logout() {
+  localStorage.removeItem(KEY);
+  sessionStorage.removeItem(KEY);
+  CONN = "";
+  location.reload();
+}
+
+/* ---------- tabs ---------- */
+
+const LOADERS = {
+  overview: loadOverview, queue: loadQueue, tracking: loadTracking, interviews: loadInterviews,
+  filtered: loadFiltered, cvs: loadCVs, settings: loadSettings,
+};
+
+function showTab(name) {
+  document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("hidden", s.id !== "tab-" + name));
+  if (location.hash.slice(1) !== name) history.replaceState(null, "", "#" + name);
+  LOADERS[name]().catch(handleError);
+}
+
+function handleError(err) {
+  if (err.status === 401 || err.status === 403 || /password authentication/i.test(err.message)) return logout();
+  toast("Error: " + err.message.slice(0, 140));
+  console.error(err);
+}
+
+/* ---------- overview ---------- */
+
+async function loadOverview() {
+  const [counts, runs] = await Promise.all([
+    sql("SELECT status, category, COUNT(*) AS n FROM jobs GROUP BY status, category"),
+    sql("SELECT kind, started_at, finished_at, ok, summary FROM runs ORDER BY started_at DESC LIMIT 8"),
+    loadSettingsData(),
+  ]);
+  const c = (pred) => counts.filter(pred).reduce((a, r) => a + Number(r.n), 0);
+  const stats = [
+    ["In queue", c((r) => r.status === "new"), "queue"],
+    ["Internships in queue", c((r) => r.status === "new" && r.category === "internship"), "queue"],
+    ["Applied", c((r) => ["applied", "interview", "offer", "declined"].includes(r.status)), "tracking"],
+    ["Waiting to apply", c((r) => ["approved", "applying"].includes(r.status)), "tracking"],
+    ["Need you", c((r) => r.status === "failed"), "tracking"],
+    ["Interviews", c((r) => r.status === "interview"), "interviews"],
+  ];
+  $("#stats").innerHTML = stats.map(([label, n, tab]) =>
+    `<button class="stat" data-go="${tab}" style="text-align:left;cursor:pointer"><b>${n}</b><span>${esc(label)}</span></button>`).join("");
+  $("#stats").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => showTab(b.dataset.go));
+
+  $("#runs").innerHTML = runs.length ? runs.map((r) => {
+    let s = {};
+    try { s = JSON.parse(r.summary || "{}"); } catch (_) {}
+    const parts = [];
+    if (s.found != null) parts.push(`found ${s.found}, kept ${s.new_kept} new (${s.kept_internships} internships, ${s.kept_remote_jobs} remote)`);
+    if (s.applied != null) parts.push(`applied ${s.applied}, queued ${s.queued || 0}, failed ${s.failed || 0}`);
+    if (s.errors && Object.keys(s.errors).length) parts.push(`⚠ errors: ${Object.keys(s.errors).join(", ")}`);
+    if (s.note) parts.push(s.note);
+    return `<div class="card run">${r.ok ? "✅" : "⚠️"} <b>${esc(r.kind)}</b> · ${esc(ago(r.started_at))}<br><span class="muted">${esc(parts.join(" · "))}</span></div>`;
+  }).join("") : `<div class="empty">No runs yet. The job finder runs automatically twice a day.</div>`;
+}
+
+/* ---------- job cards ---------- */
+
+const STATUS_LABEL = {
+  new: "In queue", approved: "Approved", applying: "Applying…", applied: "Applied", failed: "Auto-apply failed",
+  interview: "Interview", offer: "Offer 🎉", declined: "Company said no", rejected: "Skipped",
+};
+const CAN_AUTO = (j) => ["greenhouse", "lever", "ashby"].includes(j.ats);
+
+function jobCard(j) {
+  const score = Number(j.score) || 0;
+  const tags = [
+    j.category === "internship" ? "Internship" : "Remote",
+    j.kind && j.kind !== "internship" ? j.kind.replace("fulltime", "Full-time").replace("parttime", "Part-time").replace("contract", "Contract") : "",
+    `CV: ${j.variant}`, j.source,
+  ].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`);
+  if (j.salary) tags.unshift(`<span class="tag money">${esc(j.salary)}</span>`);
+  if (CAN_AUTO(j)) tags.push(`<span class="tag auto">auto-apply possible</span>`);
+  (j.flags || "").split(", ").filter(Boolean).forEach((f) => tags.push(`<span class="tag flag">${esc(f)}</span>`));
+
+  const btn = (label, cls, act) => `<button class="btn small ${cls}" data-act="${act}">${label}</button>`;
+  const actions = [`<a class="btn small" href="${safeUrl(j.apply_url || j.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a>`];
+  if (j.status === "new") {
+    actions.push(btn(CAN_AUTO(j) ? "✅ Apply for me" : "✅ Approve", "good", "approved"));
+    actions.push(btn("Mark applied", "", "applied"));
+    actions.push(btn("✕ Skip", "bad", "rejected"));
+  } else {
+    if (["approved", "failed", "applying"].includes(j.status)) actions.push(btn("Mark applied", "", "applied"));
+    if (["applied", "approved"].includes(j.status)) actions.push(btn("🎤 Interview", "good", "interview"));
+    if (["applied", "interview"].includes(j.status)) actions.push(btn("Company said no", "", "declined"));
+    if (j.status === "interview") actions.push(btn("🎉 Offer", "good", "offer"));
+    actions.push(btn("↺ Back to queue", "ghost", "new"));
+  }
+  actions.push(btn("Details", "ghost", "details"));
+
+  return `<article class="job" data-id="${esc(j.id)}">
+    <div class="job-head">
+      <div class="score ${score >= 55 ? "hi" : score < 25 ? "lo" : ""}" title="match score">${score}</div>
+      <div style="flex:1;min-width:0">
+        <div class="job-title">${esc(j.title)}</div>
+        <div class="job-meta">${esc(j.company)} · ${esc((j.location || "").slice(0, 90))} · found ${esc(ago(j.found_at))}
+          ${j.status !== "new" ? ` · <b>${esc(STATUS_LABEL[j.status] || j.status)}</b> ${esc(ago(j.status_at))}` : ""}</div>
+        <div class="tags">${tags.join("")}</div>
+      </div>
+    </div>
+    <div class="actions">${actions.join("")}</div>
+    <div class="extra hidden"></div>
+  </article>`;
+}
+
+function wireCards(container, reload) {
+  container.querySelectorAll(".job").forEach((card) => {
+    const id = card.dataset.id;
+    card.querySelectorAll("[data-act]").forEach((b) => b.onclick = async () => {
+      const act = b.dataset.act;
+      try {
+        if (act === "details") return toggleDetails(card, id);
+        const extra = act === "applied" ? ", applied_at = $3" : "";
+        const params = act === "applied" ? [act, now(), now(), id] : [act, now(), id];
+        await sql(`UPDATE jobs SET status = $1, status_at = $2${extra} WHERE id = $${params.length}`, params);
+        toast({ approved: "Approved ✅", rejected: "Skipped", applied: "Marked as applied", interview: "Moved to interviews 🎤",
+                offer: "Congratulations! 🎉", declined: "Noted", new: "Back in the queue" }[act] || "Saved");
+        card.style.opacity = ".4";
+        setTimeout(reload, 250);
+      } catch (err) { handleError(err); }
+    });
+  });
+}
+
+async function toggleDetails(card, id) {
+  const box = card.querySelector(".extra");
+  if (!box.classList.contains("hidden")) return box.classList.add("hidden");
+  const [r] = await sql("SELECT description, notes, apply_log FROM jobs WHERE id = $1", [id]);
+  box.innerHTML = `
+    ${r.apply_log ? `<div class="desc"><b>Auto-apply log</b>\n${esc(r.apply_log)}</div>` : ""}
+    <div class="desc">${esc(r.description || "(no description saved)")}</div>
+    <div class="notes"><textarea rows="2" placeholder="Your notes…">${esc(r.notes || "")}</textarea>
+      <button class="btn small" style="margin-top:.3rem">Save note</button></div>`;
+  box.classList.remove("hidden");
+  box.querySelector(".notes button").onclick = async () => {
+    await sql("UPDATE jobs SET notes = $1 WHERE id = $2", [box.querySelector("textarea").value, id]).catch(handleError);
+    toast("Note saved");
+  };
+}
+
+const JOB_FIELDS = "id, source, company, title, location, kind, category, url, apply_url, ats, salary, found_at, score, variant, flags, status, status_at";
+
+async function loadQueue() {
+  const cat = $("#q-category").value;
+  const sort = $("#q-sort").value === "new" ? "found_at DESC, score DESC" : "score DESC, found_at DESC";
+  const words = $("#q-search").value.trim().toLowerCase();
+  const params = ["new"];
+  let where = "status = $1";
+  if (cat) { params.push(cat); where += ` AND category = $${params.length}`; }
+  if (words) { params.push(`%${words}%`); where += ` AND (LOWER(title) LIKE $${params.length} OR LOWER(company) LIKE $${params.length} OR LOWER(description) LIKE $${params.length})`; }
+  const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE ${where} ORDER BY ${sort} LIMIT 150`, params);
+  const list = $("#queue-list");
+  list.innerHTML = rows.length ? rows.map(jobCard).join("") : `<div class="empty">Nothing in the queue. New jobs arrive twice a day.</div>`;
+  wireCards(list, loadQueue);
+}
+
+async function loadTracking() {
+  const statuses = $("#t-status").value.split(",");
+  const ph = statuses.map((_, i) => `$${i + 1}`).join(", ");
+  const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status IN (${ph}) ORDER BY status_at DESC LIMIT 200`, statuses);
+  const list = $("#tracking-list");
+  list.innerHTML = rows.length ? rows.map(jobCard).join("") : `<div class="empty">Nothing here yet.</div>`;
+  wireCards(list, loadTracking);
+}
+
+async function loadInterviews() {
+  const [ivs, jobs] = await Promise.all([
+    sql("SELECT company, title, starts_at, link, subject, sender, snippet, invite_sent FROM interviews ORDER BY starts_at DESC LIMIT 50"),
+    sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status = 'interview' ORDER BY status_at DESC`),
+  ]);
+  const ivHtml = ivs.map((i) => `<div class="card"><b>${esc(i.company || i.sender)}</b> · ${esc(i.title || i.subject)}<br>
+      <span class="muted">${i.starts_at ? "🗓 " + esc(new Date(i.starts_at).toLocaleString()) : "Time not found in the email"}
+      ${Number(i.invite_sent) ? " · calendar invite sent" : ""}</span>
+      ${i.link ? `<br><a href="${safeUrl(i.link)}" target="_blank" rel="noopener noreferrer">Meeting link ↗</a>` : ""}
+      <div class="muted" style="font-size:.85rem;margin-top:.3rem">${esc(i.snippet || "")}</div></div>`).join("");
+  $("#interview-list").innerHTML = (ivHtml + jobs.map(jobCard).join("")) ||
+    `<div class="empty">No interviews yet. When an interview email arrives in Gmail, it shows up here and you get a calendar invite.</div>`;
+  wireCards($("#interview-list"), loadInterviews);
+}
+
+async function loadFiltered() {
+  const r = $("#f-reason").value;
+  const rows = r
+    ? await sql("SELECT source, company, title, location, url, reason, found_at FROM dropped WHERE reason LIKE $1 ORDER BY found_at DESC LIMIT 200", [`%${r}%`])
+    : await sql("SELECT source, company, title, location, url, reason, found_at FROM dropped WHERE reason NOT LIKE 'not a tech%' AND reason NOT LIKE 'not remote%' ORDER BY found_at DESC LIMIT 200");
+  $("#filtered-list").innerHTML = rows.length ? rows.map((d) => `<div class="job">
+      <div class="job-title">${esc(d.title)}</div>
+      <div class="job-meta">${esc(d.company)} · ${esc((d.location || "").slice(0, 70))} · ${esc(d.source)}</div>
+      <div class="tags"><span class="tag flag">${esc(d.reason)}</span></div>
+      <div class="actions"><a class="btn small" href="${safeUrl(d.url)}" target="_blank" rel="noopener noreferrer">Open ↗</a></div>
+    </div>`).join("") : `<div class="empty">Nothing filtered with that reason.</div>`;
+}
+
+async function loadCVs() {
+  const rows = await sql("SELECT name, mime, updated_at FROM files ORDER BY name");
+  $("#cv-list").innerHTML = rows.length ? rows.map((f) => `<div class="job"><div class="job-head">
+      <div style="flex:1"><div class="job-title">${esc(f.name)}</div><div class="job-meta">updated ${esc(ago(f.updated_at))}</div></div>
+      <button class="btn small" data-file="${esc(f.name)}">Download</button></div></div>`).join("")
+    : `<div class="empty">CVs appear here after the first run.</div>`;
+  $("#cv-list").querySelectorAll("[data-file]").forEach((b) => b.onclick = async () => {
+    const [f] = await sql("SELECT mime, b64 FROM files WHERE name = $1", [b.dataset.file]);
+    const bytes = Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: f.mime }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: b.dataset.file });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  });
+}
+
+/* ---------- settings ---------- */
+
+async function loadSettingsData() {
+  const rows = await sql("SELECT key, value FROM settings");
+  SETTINGS = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+  const pill = $("#mode-pill");
+  if (SETTINGS.paused === "1") { pill.textContent = "Paused"; pill.className = "pill bad"; }
+  else if (SETTINGS.dry_run === "1") { pill.textContent = "Test mode"; pill.className = "pill warn"; }
+  else { pill.textContent = "Live"; pill.className = "pill"; }
+  return SETTINGS;
+}
+
+async function saveSetting(key, value) {
+  await sql("INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2", [key, String(value)]);
+  SETTINGS[key] = String(value);
+  await loadSettingsData();
+  toast("Saved");
+}
+
+async function loadSettings() {
+  await loadSettingsData();
+  const sw = (key, title, help, invert = false) => {
+    const on = (SETTINGS[key] === "1") !== invert;
+    return `<div class="setting"><div><b>${title}</b><small>${help}</small></div>
+      <label class="switch"><input type="checkbox" data-key="${key}" data-invert="${invert ? 1 : 0}" ${on ? "checked" : ""}><span></span></label></div>`;
+  };
+  const num = (key, title, help, min, max) => `<div class="setting"><div><b>${title}</b><small>${help}</small></div>
+      <input type="number" min="${min}" max="${max}" data-num="${key}" value="${esc(SETTINGS[key])}"></div>`;
+  let sources = {};
+  try { sources = JSON.parse(SETTINGS.sources || "{}"); } catch (_) {}
+  const srcNames = { remotive: "Remotive", remoteok: "RemoteOK", himalayas: "Himalayas", jobicy: "Jobicy", weworkremotely: "We Work Remotely",
+    hn: "Hacker News: Who is hiring", ats: "Company career pages (Greenhouse/Lever/Ashby)", internshala: "Internshala (Bangalore)" };
+
+  $("#settings-form").innerHTML = `
+    ${sw("paused", "Running", "Turn off to pause everything (finding and applying).", true)}
+    ${sw("dry_run", "Test mode", "On: fills forms and takes screenshots but does NOT submit. Turn off when you're happy.")}
+    ${num("daily_cap", "Max automatic applications per day", "Safety limit.", 0, 50)}
+    ${num("auto_threshold", "Minimum match score for auto-apply", "Jobs below this wait in the queue for you.", 0, 100)}
+    ${sw("remote_internships", "Also remote internships", "Off: internships only in Bangalore. On: also work-from-home internships open to India.")}
+    <div class="setting"><div><b>Run now</b><small>Ask the job finder to run at its next check (within the hour).</small></div>
+      <button class="btn small primary" id="run-now">${SETTINGS.run_requested === "1" ? "Requested ✓" : "Run now"}</button></div>
+    <h2>Sources</h2>
+    ${Object.entries(srcNames).map(([k, label]) => `<div class="setting"><div>${esc(label)}</div>
+      <label class="switch"><input type="checkbox" data-src="${k}" ${sources[k] !== false ? "checked" : ""}><span></span></label></div>`).join("")}
+    <p class="hint">Never applied to, whatever the settings: anything asking you to pay, training-and-placement programmes, edtech or institutes, recruitment agencies, and unpaid internships.</p>`;
+
+  const form = $("#settings-form");
+  form.querySelectorAll("[data-key]").forEach((i) => i.onchange = () => {
+    const on = i.checked !== (i.dataset.invert === "1");
+    saveSetting(i.dataset.key, on ? "1" : "0").catch(handleError);
+  });
+  form.querySelectorAll("[data-num]").forEach((i) => i.onchange = () => saveSetting(i.dataset.num, Math.max(0, parseInt(i.value || "0", 10))).catch(handleError));
+  form.querySelectorAll("[data-src]").forEach((i) => i.onchange = () => {
+    sources[i.dataset.src] = i.checked;
+    saveSetting("sources", JSON.stringify(sources)).catch(handleError);
+  });
+  $("#run-now").onclick = () => saveSetting("run_requested", "1").then(loadSettings).catch(handleError);
+}
+
+/* ---------- start ---------- */
+
+function start() {
+  $("#login").classList.add("hidden");
+  $("#app").classList.remove("hidden");
+  loadSettingsData().catch(handleError);
+  const tab = location.hash.slice(1);
+  showTab(LOADERS[tab] ? tab : "overview");
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  $("#login-form").onsubmit = login;
+  $("#logout").onclick = logout;
+  window.addEventListener("hashchange", () => { const t = location.hash.slice(1); if (CONN && LOADERS[t]) showTab(t); });
+  $("#tabs").querySelectorAll("button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));
+  ["#q-category", "#q-sort"].forEach((s) => $(s).onchange = () => loadQueue().catch(handleError));
+  let timer;
+  $("#q-search").oninput = () => { clearTimeout(timer); timer = setTimeout(() => loadQueue().catch(handleError), 300); };
+  $("#t-status").onchange = () => loadTracking().catch(handleError);
+  $("#f-reason").onchange = () => loadFiltered().catch(handleError);
+  if (CONN) sql("SELECT 1 AS ok").then(start).catch(() => { CONN = ""; $("#login").classList.remove("hidden"); });
+  else $("#login").classList.remove("hidden");
+});

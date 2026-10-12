@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0f172a">
+  <title>Job Hunt · Dhruv</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Login -->
+  <main id="login" class="login hidden">
+    <form id="login-form" class="card login-card">
+      <div class="logo">🎯</div>
+      <h1>Job Hunt</h1>
+      <p class="muted">Private dashboard. Enter your password.</p>
+      <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+      <label class="check"><input id="remember" type="checkbox" checked> Keep me signed in on this device</label>
+      <button type="submit" class="btn primary wide">Sign in</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app" class="hidden">
+    <header class="top">
+      <div class="brand">🎯 Job Hunt</div>
+      <div id="mode-pill" class="pill"></div>
+      <button id="logout" class="btn ghost small">Sign out</button>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button data-tab="overview" class="active">Overview</button>
+      <button data-tab="queue">Queue</button>
+      <button data-tab="tracking">Applications</button>
+      <button data-tab="interviews">Interviews</button>
+      <button data-tab="filtered">Filtered out</button>
+      <button data-tab="cvs">CVs</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <main class="content">
+      <section id="tab-overview" class="tab">
+        <div id="stats" class="stats"></div>
+        <h2>Last runs</h2>
+        <div id="runs"></div>
+      </section>
+
+      <section id="tab-queue" class="tab hidden">
+        <div class="toolbar">
+          <select id="q-category">
+            <option value="">All</option>
+            <option value="internship">Internships (Bangalore)</option>
+            <option value="remote_job">Remote jobs</option>
+          </select>
+          <select id="q-sort">
+            <option value="score">Best match</option>
+            <option value="new">Newest</option>
+          </select>
+          <input id="q-search" type="search" placeholder="Search title, company, skill…">
+        </div>
+        <p class="hint">✅ <b>Apply</b>: the tool applies for you if the company uses Greenhouse/Lever/Ashby; otherwise open the link and apply, then tap <b>Mark applied</b>. ✕ <b>Skip</b> hides it.</p>
+        <div id="queue-list" class="list"></div>
+      </section>
+
+      <section id="tab-tracking" class="tab hidden">
+        <div class="toolbar">
+          <select id="t-status">
+            <option value="approved,applying,applied,failed,interview,offer,declined">All active</option>
+            <option value="approved,applying">Waiting to apply</option>
+            <option value="applied">Applied</option>
+            <option value="failed">Needs you (failed)</option>
+            <option value="interview">Interview</option>
+            <option value="offer">Offer</option>
+            <option value="declined">Company said no</option>
+            <option value="rejected">Skipped by me</option>
+          </select>
+        </div>
+        <div id="tracking-list" class="list"></div>
+      </section>
+
+      <section id="tab-interviews" class="tab hidden">
+        <div id="interview-list" class="list"></div>
+      </section>
+
+      <section id="tab-filtered" class="tab hidden">
+        <p class="hint">Jobs the tool threw away and why, so you can check the scam/fee and “direct employer only” rules are doing their job.</p>
+        <div class="toolbar">
+          <select id="f-reason">
+            <option value="">All reasons</option>
+            <option value="scam">Payment / training programme / agency</option>
+            <option value="not a direct">Not a direct employer</option>
+            <option value="unpaid">Unpaid</option>
+            <option value="not in Bangalore">Internship not in Bangalore</option>
+            <option value="remote only">Remote but not open to India</option>
+            <option value="too senior">Too senior</option>
+            <option value="needs">Too many years asked</option>
+          </select>
+        </div>
+        <div id="filtered-list" class="list"></div>
+      </section>
+
+      <section id="tab-cvs" class="tab hidden">
+        <div id="cv-list" class="list"></div>
+      </section>
+
+      <section id="tab-settings" class="tab hidden">
+        <div id="settings-form" class="card settings"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
