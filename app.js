@@ -188,6 +188,7 @@ function jobCard(j) {
         <div class="job-meta">${esc(j.company)} · ${esc((j.location || "").slice(0, 90))} · found ${esc(ago(j.found_at))}
           ${j.status !== "new" ? ` · <b>${esc(STATUS_LABEL[j.status] || j.status)}</b> ${esc(ago(j.status_at))}` : ""}</div>
         <div class="tags">${tags.join("")}</div>
+        ${/^Internshala: /.test(j.notes || "") ? `<div class="job-meta" style="margin-top:.35rem">📬 ${esc(j.notes.slice(13, 120))}</div>` : ""}
       </div>
     </div>
     <div class="actions">${actions.join("")}</div>
@@ -238,7 +239,7 @@ async function toggleDetails(card, id) {
   };
 }
 
-const JOB_FIELDS = "id, source, apply_log, company, title, location, kind, category, url, apply_url, ats, salary, found_at, score, variant, flags, status, status_at";
+const JOB_FIELDS = "id, source, apply_log, notes, company, title, location, kind, category, url, apply_url, ats, salary, found_at, score, variant, flags, status, status_at";
 
 async function loadQueue() {
   const cat = $("#q-category").value;
