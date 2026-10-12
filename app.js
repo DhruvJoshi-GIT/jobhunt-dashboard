@@ -295,10 +295,12 @@ async function loadNeeds() {
   const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status = 'prepared'
       OR (status = 'failed' AND apply_log NOT LIKE 'NEEDS:%')
       OR (status = 'new' AND ats IN ('workday', '')) ORDER BY score DESC LIMIT 300`);
-  const pending = await sql("SELECT COUNT(*) AS n FROM jobs WHERE status = 'new' AND ats = 'internshala'");
+  const pending = await sql("SELECT COUNT(*) AS n FROM jobs WHERE status = 'new' AND ats IN ('internshala', 'linkedin')");
   const sections = [
     ["📝 Internshala: ready for you to submit", "The answers are written for you. Open the internship, tap Apply, paste them, Submit.",
-      rows.filter((j) => j.status === "prepared"), internshalaCard],
+      rows.filter((j) => j.status === "prepared" && j.ats === "internshala"), internshalaCard],
+    ["🔗 LinkedIn Easy Apply", "Open it in the LinkedIn app, tap Easy Apply (it fills your profile), upload the CV named below if asked, paste answers, Submit.",
+      rows.filter((j) => j.status === "prepared" && j.ats === "linkedin"), internshalaCard],
     ["🔒 CAPTCHA: just press Submit", "The form is filled up to the “I'm not a robot” check. Open it, tick it, Submit.",
       rows.filter((j) => j.status === "failed" && /^CAPTCHA/.test(j.apply_log || "")), jobCard],
     ["🏢 Workday", "Big companies' hiring system: each company needs its own Workday account (email + password) before you can apply.",
@@ -312,7 +314,7 @@ async function loadNeeds() {
   const nb = $("#n-badge"); nb.textContent = total; nb.classList.toggle("hidden", !total);
   $("#needs-list").innerHTML = sections.map(([title, help, list, card]) => list.length ? `
       <h2 class="section-h">${title} (${list.length})</h2><p class="hint">${help}</p>${grouped(list, card)}` : "").join("")
-    + (Number(pending[0].n) ? `<p class="hint">⏳ ${pending[0].n} more Internshala internships are being prepared (a batch every hour).</p>` : "")
+    + (Number(pending[0].n) ? `<p class="hint">⏳ ${pending[0].n} more Internshala / LinkedIn applications are being prepared (a batch every hour).</p>` : "")
     || `<div class="empty">Nothing needs you right now. 🎉</div>`;
   $("#needs-list").querySelectorAll("[data-copy]").forEach((b) => b.onclick = async () => {
     try { await navigator.clipboard.writeText(b.closest(".job").querySelector(`[data-text="${b.dataset.copy}"]`).textContent); toast("Copied"); }
@@ -327,11 +329,14 @@ function internshalaCard(j) {
   return `<article class="job" data-id="${esc(j.id)}">
     <div class="job-title">${esc(j.title)}</div>
     <div class="job-meta">${esc(j.company)} · ${esc((j.location || "").slice(0, 60))} ${j.salary ? "· " + esc(j.salary) : ""}</div>
-    <div class="actions"><a class="btn small primary" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">1. Open on Internshala ↗</a></div>
-    <div class="job-meta" style="margin-top:.6rem"><b>2. “Why should you be hired?”</b> <button class="btn small" data-copy="why">Copy</button></div>
+    <div class="actions"><a class="btn small primary" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">1. Open on ${j.ats === "linkedin" ? "LinkedIn" : "Internshala"} ↗</a></div>
+    ${p.cv ? `<div class="job-meta" style="margin-top:.5rem">CV to upload: <b>${esc(p.cv)}</b> (CVs tab)</div>` : ""}
+    <div class="job-meta" style="margin-top:.6rem"><b>2. ${j.ats === "linkedin" ? "Cover note / “Why you?”" : "“Why should you be hired?”"}</b> <button class="btn small" data-copy="why">Copy</button></div>
     <div class="paste" data-text="why">${esc(p.why || "")}</div>
     <div class="job-meta" style="margin-top:.6rem"><b>Availability</b> <button class="btn small" data-copy="av">Copy</button></div>
     <div class="paste" data-text="av">${esc(p.availability || "")}</div>
+    ${p.common ? `<div class="job-meta" style="margin-top:.6rem"><b>Common questions</b> <button class="btn small" data-copy="common">Copy</button></div>
+      <div class="paste" data-text="common">${esc(p.common)}</div>` : ""}
     <div class="actions"><button class="btn small good" data-act="applied">3. ✅ I submitted it</button>
       <button class="btn small bad" data-act="rejected">✕ Skip</button></div>
   </article>`;
@@ -425,7 +430,8 @@ async function loadSettings() {
   let sources = {};
   try { sources = JSON.parse(SETTINGS.sources || "{}"); } catch (_) {}
   const srcNames = { remotive: "Remotive", remoteok: "RemoteOK", himalayas: "Himalayas", jobicy: "Jobicy", weworkremotely: "We Work Remotely",
-    hn: "Hacker News: Who is hiring", ats: "Company career pages (Greenhouse/Lever/Ashby)", internshala: "Internshala (Bangalore)" };
+    hn: "Hacker News: Who is hiring", ats: "Company career pages (Greenhouse/Lever/Ashby/Workable/Recruitee/SmartRecruiters)",
+    internshala: "Internshala", linkedin: "LinkedIn (public listings, no login)" };
 
   $("#settings-form").innerHTML = `
     ${sw("paused", "Running", "Turn off to pause everything (finding and applying).", true)}
