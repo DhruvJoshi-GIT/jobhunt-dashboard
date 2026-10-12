@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f172a">
   <title>Job Hunt · Dhruv</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <!-- Login -->
@@ -16,7 +16,10 @@
       <div class="logo">🎯</div>
       <h1>Job Hunt</h1>
       <p class="muted">Private dashboard. Enter your password.</p>
-      <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+      <div class="pw-wrap">
+        <input id="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Password" required>
+        <button type="button" id="show-pw" class="btn ghost small" aria-label="Show password">Show</button>
+      </div>
       <label class="check"><input id="remember" type="checkbox" checked> Keep me signed in on this device</label>
       <button type="submit" class="btn primary wide">Sign in</button>
       <p id="login-error" class="error"></p>
@@ -113,7 +116,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="config.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="config.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

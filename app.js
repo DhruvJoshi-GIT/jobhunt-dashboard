@@ -63,6 +63,7 @@ async function login(e) {
     await sql("SELECT 1 AS ok");
     (($("#remember").checked) ? localStorage : sessionStorage).setItem(KEY, CONN);
     $("#password").value = "";
+    $("#password").type = "password";
     start();
   } catch (err) {
     CONN = "";
@@ -354,6 +355,13 @@ function start() {
 
 document.addEventListener("DOMContentLoaded", () => {
   $("#login-form").onsubmit = login;
+  $("#show-pw").onclick = () => {
+    const i = $("#password"), show = i.type === "password";
+    i.type = show ? "text" : "password";
+    $("#show-pw").textContent = show ? "Hide" : "Show";
+    $("#show-pw").setAttribute("aria-label", show ? "Hide password" : "Show password");
+    i.focus();
+  };
   $("#logout").onclick = logout;
   window.addEventListener("hashchange", () => { const t = location.hash.slice(1); if (CONN && LOADERS[t]) showTab(t); });
   $("#tabs").querySelectorAll("button").forEach((b) => b.onclick = () => showTab(b.dataset.tab));

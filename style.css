@@ -33,6 +33,9 @@ h1 { margin: .2em 0; } h2 { font-size: 1rem; margin: 1.2rem 0 .5rem; }
 .login-card .logo { font-size: 2.6rem; }
 input, select, textarea { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line);
   border-radius: 9px; padding: .6rem .7rem; width: 100%; }
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 4.6rem; }
+.pw-wrap .btn { position: absolute; right: .3rem; top: 50%; transform: translateY(-50%); }
 .check { display: flex; gap: .5rem; align-items: center; justify-content: center; color: var(--muted); font-size: .9rem; }
 .check input { width: auto; }
 
