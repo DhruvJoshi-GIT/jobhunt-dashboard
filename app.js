@@ -35,7 +35,8 @@ function toast(msg) {
 async function sql(query, params = []) {
   const res = await fetch(SQL_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Neon-Connection-String": CONN },
+    // No Content-Type header on purpose: Neon only allows its own headers from browsers (CORS).
+    headers: { "Neon-Connection-String": CONN },
     body: JSON.stringify({ query, params }),
   });
   if (!res.ok) {
