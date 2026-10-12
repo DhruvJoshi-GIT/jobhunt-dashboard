@@ -81,7 +81,7 @@ function logout() {
 /* ---------- tabs ---------- */
 
 const LOADERS = {
-  overview: loadOverview, queue: loadQueue, tracking: loadTracking, interviews: loadInterviews,
+  overview: loadOverview, queue: loadQueue, questions: loadQuestions, tracking: loadTracking, interviews: loadInterviews,
   filtered: loadFiltered, cvs: loadCVs, settings: loadSettings,
 };
 
@@ -111,7 +111,8 @@ async function loadOverview() {
     ["In queue", c((r) => r.status === "new"), "queue"],
     ["Internships in queue", c((r) => r.status === "new" && r.category === "internship"), "queue"],
     ["Applied", c((r) => ["applied", "interview", "offer", "declined"].includes(r.status)), "tracking"],
-    ["Waiting to apply", c((r) => ["approved", "applying"].includes(r.status)), "tracking"],
+    ["Ready (test mode)", c((r) => r.status === "ready"), "tracking"],
+    ["Applying soon", c((r) => ["approved", "applying"].includes(r.status)), "tracking"],
     ["Need you", c((r) => r.status === "failed"), "tracking"],
     ["Interviews", c((r) => r.status === "interview"), "interviews"],
   ];
@@ -124,7 +125,7 @@ async function loadOverview() {
     try { s = JSON.parse(r.summary || "{}"); } catch (_) {}
     const parts = [];
     if (s.found != null) parts.push(`found ${s.found}, kept ${s.new_kept} new (${s.kept_internships} internships, ${s.kept_remote_jobs} remote)`);
-    if (s.applied != null) parts.push(`applied ${s.applied}, queued ${s.queued || 0}, failed ${s.failed || 0}`);
+    if (s.tried != null) parts.push(`${s.live ? "submitted" : "test mode"}: tried ${s.tried}, applied ${s.applied}, ready ${s.ready}, need answers ${s.needs_answers}, problems ${s.failed}`);
     if (s.errors && Object.keys(s.errors).length) parts.push(`⚠ errors: ${Object.keys(s.errors).join(", ")}`);
     if (s.note) parts.push(s.note);
     return `<div class="card run">${r.ok ? "✅" : "⚠️"} <b>${esc(r.kind)}</b> · ${esc(ago(r.started_at))}<br><span class="muted">${esc(parts.join(" · "))}</span></div>`;
@@ -134,7 +135,7 @@ async function loadOverview() {
 /* ---------- job cards ---------- */
 
 const STATUS_LABEL = {
-  new: "In queue", approved: "Approved", applying: "Applying…", applied: "Applied", failed: "Auto-apply failed",
+  new: "In queue", approved: "Applying soon", ready: "Ready (test mode)", closed: "Job closed", applying: "Applying…", applied: "Applied", failed: "Auto-apply failed",
   interview: "Interview", offer: "Offer 🎉", declined: "Company said no", rejected: "Skipped",
 };
 const CAN_AUTO = (j) => ["greenhouse", "lever", "ashby"].includes(j.ats);
@@ -157,7 +158,8 @@ function jobCard(j) {
     actions.push(btn("Mark applied", "", "applied"));
     actions.push(btn("✕ Skip", "bad", "rejected"));
   } else {
-    if (["approved", "failed", "applying"].includes(j.status)) actions.push(btn("Mark applied", "", "applied"));
+    if (j.status === "failed") actions.push(btn("↻ Try again", "good", "approved"));
+    if (["approved", "failed", "applying", "ready"].includes(j.status)) actions.push(btn("Mark applied", "", "applied"));
     if (["applied", "approved"].includes(j.status)) actions.push(btn("🎤 Interview", "good", "interview"));
     if (["applied", "interview"].includes(j.status)) actions.push(btn("Company said no", "", "declined"));
     if (j.status === "interview") actions.push(btn("🎉 Offer", "good", "offer"));
@@ -203,12 +205,20 @@ async function toggleDetails(card, id) {
   const box = card.querySelector(".extra");
   if (!box.classList.contains("hidden")) return box.classList.add("hidden");
   const [r] = await sql("SELECT description, notes, apply_log FROM jobs WHERE id = $1", [id]);
+  const shots = await sql("SELECT name FROM files WHERE name = $1", ["shot_" + id + ".jpg"]);
   box.innerHTML = `
-    ${r.apply_log ? `<div class="desc"><b>Auto-apply log</b>\n${esc(r.apply_log)}</div>` : ""}
+    ${r.apply_log ? `<div class="desc"><b>Auto-apply log</b>\n${esc(r.apply_log.replace(/^NEEDS:.*\n/, ""))}</div>` : ""}
+    ${shots.length ? `<button class="btn small" data-shot>Show the filled form</button><div class="shot-box"></div>` : ""}
     <div class="desc">${esc(r.description || "(no description saved)")}</div>
     <div class="notes"><textarea rows="2" placeholder="Your notes…">${esc(r.notes || "")}</textarea>
       <button class="btn small" style="margin-top:.3rem">Save note</button></div>`;
   box.classList.remove("hidden");
+  const sb = box.querySelector("[data-shot]");
+  if (sb) sb.onclick = async () => {
+    const [f] = await sql("SELECT b64 FROM files WHERE name = $1", ["shot_" + id + ".jpg"]);
+    box.querySelector(".shot-box").innerHTML = `<img class="shot" alt="filled form" src="data:image/jpeg;base64,${f.b64}">`;
+    sb.remove();
+  };
   box.querySelector(".notes button").onclick = async () => {
     await sql("UPDATE jobs SET notes = $1 WHERE id = $2", [box.querySelector("textarea").value, id]).catch(handleError);
     toast("Note saved");
@@ -268,6 +278,47 @@ async function loadFiltered() {
     </div>`).join("") : `<div class="empty">Nothing filtered with that reason.</div>`;
 }
 
+async function loadQuestions() {
+  const rows = await sql("SELECT question, label, answer, example_job, options FROM answers ORDER BY (answer = '') DESC, asked_at DESC LIMIT 200");
+  updateBadge(rows.filter((r) => !r.answer).length);
+  const list = $("#questions-list");
+  if (!rows.length) { list.innerHTML = `<div class="empty">No questions. The agent could answer everything so far. 🎉</div>`; return; }
+  list.innerHTML = rows.map((r, i) => {
+    let opts = [];
+    try { opts = JSON.parse(r.options || "[]"); } catch (_) {}
+    const chosen = (r.answer || "").split(" || ");
+    return `<div class="job" data-i="${i}">
+      <div class="job-title">${esc(r.label)}</div>
+      <div class="job-meta">asked by ${esc(r.example_job)} ${r.answer ? "· ✅ answered" : "· ⏳ waiting for you"}</div>
+      ${opts.length ? `<div class="chips">${opts.map((o) => `<button class="chip ${chosen.includes(o) ? "on" : ""}" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div>
+        <p class="hint">Tap one (or several if the question allows).</p>` : ""}
+      <textarea rows="${opts.length ? 1 : 3}" placeholder="Your answer…">${esc(r.answer || "")}</textarea>
+      <div class="actions"><button class="btn small primary" data-save>Save answer</button></div>
+    </div>`;
+  }).join("");
+  list.querySelectorAll(".job").forEach((card) => {
+    const r = rows[Number(card.dataset.i)];
+    const ta = card.querySelector("textarea");
+    card.querySelectorAll(".chip").forEach((c) => c.onclick = () => {
+      c.classList.toggle("on");
+      ta.value = Array.from(card.querySelectorAll(".chip.on")).map((x) => x.dataset.opt).join(" || ");
+    });
+    card.querySelector("[data-save]").onclick = async () => {
+      try {
+        await sql("UPDATE answers SET answer = $1, answered_at = $2 WHERE question = $3", [ta.value.trim(), now(), r.question]);
+        toast("Saved. Waiting applications will go out within the hour.");
+        loadQuestions();
+      } catch (err) { handleError(err); }
+    };
+  });
+}
+
+function updateBadge(n) {
+  const b = $("#q-badge");
+  b.textContent = n;
+  b.classList.toggle("hidden", !n);
+}
+
 async function loadCVs() {
   const rows = await sql("SELECT name, mime, updated_at FROM files ORDER BY name");
   $("#cv-list").innerHTML = rows.length ? rows.map((f) => `<div class="job"><div class="job-head">
@@ -319,6 +370,7 @@ async function loadSettings() {
 
   $("#settings-form").innerHTML = `
     ${sw("paused", "Running", "Turn off to pause everything (finding and applying).", true)}
+    ${sw("auto_apply", "Auto-apply", "On: applies by itself to every good match on Greenhouse/Lever/Ashby forms, no tap needed.")}
     ${sw("dry_run", "Test mode", "On: fills forms and takes screenshots but does NOT submit. Turn off when you're happy.")}
     ${num("daily_cap", "Max automatic applications per day", "Safety limit.", 0, 50)}
     ${num("auto_threshold", "Minimum match score for auto-apply", "Jobs below this wait in the queue for you.", 0, 100)}
@@ -349,6 +401,7 @@ function start() {
   $("#login").classList.add("hidden");
   $("#app").classList.remove("hidden");
   loadSettingsData().catch(handleError);
+  sql("SELECT COUNT(*) AS n FROM answers WHERE answer = ''").then((r) => updateBadge(Number(r[0].n))).catch(() => {});
   const tab = location.hash.slice(1);
   showTab(LOADERS[tab] ? tab : "overview");
 }

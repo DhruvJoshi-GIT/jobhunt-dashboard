@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f172a">
   <title>Job Hunt · Dhruv</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
   <!-- Login -->
@@ -37,6 +37,7 @@
     <nav class="tabs" id="tabs">
       <button data-tab="overview" class="active">Overview</button>
       <button data-tab="queue">Queue</button>
+      <button data-tab="questions">Questions <span id="q-badge" class="badge hidden"></span></button>
       <button data-tab="tracking">Applications</button>
       <button data-tab="interviews">Interviews</button>
       <button data-tab="filtered">Filtered out</button>
@@ -64,14 +65,20 @@
           </select>
           <input id="q-search" type="search" placeholder="Search title, company, skill…">
         </div>
-        <p class="hint">✅ <b>Apply</b>: the tool applies for you if the company uses Greenhouse/Lever/Ashby; otherwise open the link and apply, then tap <b>Mark applied</b>. ✕ <b>Skip</b> hides it.</p>
+        <p class="hint">Jobs marked <b>auto-apply</b> are applied to automatically (no tap needed). Tap <b>✅ Apply for me</b> to push one to the front, or <b>✕ Skip</b> to never apply.</p>
         <div id="queue-list" class="list"></div>
+      </section>
+
+      <section id="tab-questions" class="tab hidden">
+        <p class="hint">Questions an application form asked that the agent couldn't answer from your profile. Answer once; it's remembered and used on every future form, and the waiting applications go out automatically.</p>
+        <div id="questions-list" class="list"></div>
       </section>
 
       <section id="tab-tracking" class="tab hidden">
         <div class="toolbar">
           <select id="t-status">
-            <option value="approved,applying,applied,failed,interview,offer,declined">All active</option>
+            <option value="approved,applying,ready,applied,failed,interview,offer,declined">All active</option>
+            <option value="ready">Ready (test mode, not sent)</option>
             <option value="approved,applying">Waiting to apply</option>
             <option value="applied">Applied</option>
             <option value="failed">Needs you (failed)</option>
@@ -79,6 +86,7 @@
             <option value="offer">Offer</option>
             <option value="declined">Company said no</option>
             <option value="rejected">Skipped by me</option>
+            <option value="closed">Job closed</option>
           </select>
         </div>
         <div id="tracking-list" class="list"></div>
@@ -116,7 +124,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="config.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="config.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

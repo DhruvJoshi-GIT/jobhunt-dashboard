@@ -95,3 +95,8 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--c
 
 .toast { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); background: #111827; color: #fff;
   padding: .6rem 1rem; border-radius: 10px; font-size: .9rem; z-index: 20; max-width: 90vw; }
+.badge { display: inline-block; min-width: 1.2rem; padding: 0 .35rem; border-radius: 99px; background: var(--bad); color: #fff; font-size: .72rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; margin: .5rem 0; }
+.chip { border: 1px solid var(--line); background: var(--bg); color: var(--text); border-radius: 99px; padding: .35rem .7rem; font: inherit; font-size: .85rem; cursor: pointer; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.shot { width: 100%; border: 1px solid var(--line); border-radius: 8px; margin-top: .5rem; }
