@@ -300,9 +300,12 @@ async function loadNeeds() {
       OR (status = 'failed' AND apply_log NOT LIKE 'NEEDS:%')
       OR (status = 'new' AND ats IN ('workday', '')) ORDER BY score DESC LIMIT 300`);
   const pending = await sql("SELECT COUNT(*) AS n FROM jobs WHERE status = 'new' AND ats IN ('internshala', 'linkedin')");
+  // (Greenhouse jobs are filled by the agent first, then show up here)
   const sections = [
     ["📝 Internshala: ready for you to submit", "The answers are written for you. Open the internship, tap Apply, paste them, Submit.",
       rows.filter((j) => j.status === "prepared" && j.ats === "internshala"), internshalaCard],
+    ["🌱 Greenhouse: apply + enter the email code", "Greenhouse emails a code that only you can type, so the agent prepares every answer instead of submitting. Open it, upload your CV (it pre-fills most fields), paste the rest, Submit, type the code.",
+      rows.filter((j) => j.status === "prepared" && j.ats === "greenhouse"), greenhouseCard],
     ["🔗 LinkedIn Easy Apply", "Open it in the LinkedIn app, tap Easy Apply (it fills your profile), upload the CV named below if asked, paste answers, Submit.",
       rows.filter((j) => j.status === "prepared" && j.ats === "linkedin"), internshalaCard],
     ["🔒 CAPTCHA: just press Submit", "The form is filled up to the “I'm not a robot” check. Open it, tick it, Submit.",
@@ -327,6 +330,21 @@ async function loadNeeds() {
     catch (_) { toast("Long-press the text to copy it"); }
   });
   wireCards($("#needs-list"), loadNeeds);
+}
+
+function greenhouseCard(j) {
+  const answers = (j.apply_log || "").split("\n").slice(1).filter((l) => l.trim() && !/^PROBLEMS:/.test(l))
+    .map((l) => l.replace(/\s+\[(rule|cv|AI \(from your profile\)|your saved answer|cover letter)\]$/, "")).join("\n");
+  return `<article class="job" data-id="${esc(j.id)}">
+    <div class="job-title">${esc(j.title)}</div>
+    <div class="job-meta">${esc(j.company)} · ${esc((j.location || "").slice(0, 60))}</div>
+    <div class="actions"><a class="btn small primary" href="${safeUrl(j.url)}" target="_blank" rel="noopener noreferrer">1. Open and apply ↗</a></div>
+    <div class="job-meta" style="margin-top:.5rem">CV to upload: <b>Dhruv_Joshi_CV_${esc(j.variant)}.pdf</b> (CVs tab)</div>
+    <div class="job-meta" style="margin-top:.6rem"><b>2. Every answer</b> <button class="btn small" data-copy="ans">Copy all</button></div>
+    <div class="paste" data-text="ans">${esc(answers || "(open Details for the log)")}</div>
+    <div class="actions"><button class="btn small good" data-act="applied">3. ✅ I submitted it</button>
+      <button class="btn small bad" data-act="rejected">✕ Skip</button></div>
+  </article>`;
 }
 
 function internshalaCard(j) {
