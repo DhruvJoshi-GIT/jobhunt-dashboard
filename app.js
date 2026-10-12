@@ -153,7 +153,8 @@ const CAN_AUTO = (j) => ["greenhouse", "lever", "ashby"].includes(j.ats);
 function jobCard(j) {
   const score = Number(j.score) || 0;
   const tags = [`<span class="tag type">${esc(TYPE_NAME[typeOf(j)])}</span>`].concat([
-    j.category === "internship" ? "" : "Remote", `CV: ${j.variant}`, j.source,
+    j.category === "internship" ? ((j.location || "").toLowerCase().includes("work from home") ? "Work from home" : "") :
+      j.category === "blr_office" ? "Bangalore office" : "Remote", `CV: ${j.variant}`, j.source,
   ].filter(Boolean).map((t) => `<span class="tag">${esc(t)}</span>`));
   if (j.salary) tags.unshift(`<span class="tag money">${esc(j.salary)}</span>`);
   if (CAN_AUTO(j)) tags.push(`<span class="tag auto">auto-apply possible</span>`);
@@ -433,6 +434,8 @@ async function loadSettings() {
     ${num("daily_cap", "Max automatic applications per day", "Safety limit.", 0, 50)}
     ${num("auto_threshold", "Minimum match score for auto-apply", "Jobs below this wait in the queue for you.", 0, 100)}
     ${sw("remote_internships", "Also remote internships", "Off: internships only in Bangalore. On: also work-from-home internships open to India.")}
+    ${sw("bangalore_office", "Also Bangalore office jobs", "On: full-time / part-time / contract jobs in Bangalore offices (not only remote).")}
+    ${sw("tech_adjacent", "Also tech-adjacent roles", "On: technical support, QA/testing, analyst, technical writer, solutions/implementation roles.")}
     <div class="setting"><div><b>Run now</b><small>Ask the job finder to run at its next check (within the hour).</small></div>
       <button class="btn small primary" id="run-now">${SETTINGS.run_requested === "1" ? "Requested ✓" : "Run now"}</button></div>
     <h2>Sources</h2>
