@@ -7,7 +7,7 @@
   <meta name="theme-color" content="#0f172a">
   <title>Job Hunt · Dhruv</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
   <!-- Login -->
@@ -93,7 +93,8 @@
         <div class="toolbar">
           <select id="t-status">
             <option value="approved,applying,ready,applied,failed,interview,offer,declined">All active</option>
-            <option value="ready">Ready (test mode, not sent)</option>
+            <option value="applied">✅ Applied</option>
+            <option value="ready">Ready (filled, sends next run)</option>
             <option value="approved,applying">Waiting to apply</option>
             <option value="applied">Applied</option>
             <option value="failed">Needs you (failed)</option>
@@ -139,7 +140,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <script src="config.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="config.js?v=8"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

@@ -110,15 +110,19 @@ async function loadOverview() {
   const stats = [
     ["In queue", c((r) => r.status === "new"), "queue"],
     ["Internships in queue", c((r) => r.status === "new" && r.category === "internship"), "queue"],
-    ["Applied", c((r) => ["applied", "interview", "offer", "declined"].includes(r.status)), "tracking"],
-    ["Ready (test mode)", c((r) => r.status === "ready"), "tracking"],
-    ["Applying soon", c((r) => ["approved", "applying"].includes(r.status)), "tracking"],
+    ["Applied ✅", c((r) => ["applied", "interview", "offer", "declined"].includes(r.status)), "tracking:applied"],
+    ["Ready, sending next run", c((r) => r.status === "ready"), "tracking:ready"],
+    ["Applying soon", c((r) => ["approved", "applying"].includes(r.status)), "tracking:approved,applying"],
     ["Need you", c((r) => r.status === "failed"), "tracking"],
     ["Interviews", c((r) => r.status === "interview"), "interviews"],
   ];
   $("#stats").innerHTML = stats.map(([label, n, tab]) =>
     `<button class="stat" data-go="${tab}" style="text-align:left;cursor:pointer"><b>${n}</b><span>${esc(label)}</span></button>`).join("");
-  $("#stats").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => showTab(b.dataset.go));
+  $("#stats").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => {
+    const [tab, filter] = b.dataset.go.split(":");
+    if (filter) $("#t-status").value = filter;
+    showTab(tab);
+  });
 
   $("#runs").innerHTML = runs.length ? runs.map((r) => {
     let s = {};
@@ -257,7 +261,7 @@ async function loadQueue() {
 async function loadTracking() {
   const statuses = $("#t-status").value.split(",");
   const ph = statuses.map((_, i) => `$${i + 1}`).join(", ");
-  const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status IN (${ph}) ORDER BY status_at DESC LIMIT 200`, statuses);
+  const rows = await sql(`SELECT ${JOB_FIELDS} FROM jobs WHERE status IN (${ph}) ORDER BY status_at DESC LIMIT 300`, statuses);
   const list = $("#tracking-list");
   list.innerHTML = rows.length ? grouped(rows, jobCard) : `<div class="empty">Nothing here yet.</div>`;
   wireCards(list, loadTracking);
