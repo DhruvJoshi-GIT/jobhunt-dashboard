@@ -307,10 +307,12 @@ async function loadNeeds() {
       rows.filter((j) => j.status === "prepared" && j.ats === "linkedin"), internshalaCard],
     ["🔒 CAPTCHA: just press Submit", "The form is filled up to the “I'm not a robot” check. Open it, tick it, Submit.",
       rows.filter((j) => j.status === "failed" && /^CAPTCHA/.test(j.apply_log || "")), jobCard],
+    ["✉️ Needs the email code", "This site sends a security code to your email before it accepts an application. Open it, apply (every answer is in Details), and type the code from your email.",
+      rows.filter((j) => j.status === "failed" && /^EMAIL CODE/.test(j.apply_log || "")), jobCard],
     ["🏢 Workday", "Big companies' hiring system: each company needs its own Workday account (email + password) before you can apply.",
       rows.filter((j) => j.status === "new" && j.ats === "workday"), jobCard],
     ["⚠️ Auto-apply problems", "The agent tried but something went wrong (details inside). Tap Try again or apply yourself.",
-      rows.filter((j) => j.status === "failed" && !/^CAPTCHA/.test(j.apply_log || "")), jobCard],
+      rows.filter((j) => j.status === "failed" && !/^(CAPTCHA|EMAIL CODE)/.test(j.apply_log || "")), jobCard],
     ["🌐 Other sites", "Posted on job boards that link to the company's own site. The agent can't apply there yet.",
       rows.filter((j) => j.status === "new" && j.ats === ""), jobCard],
   ];
